@@ -154,8 +154,16 @@ echo "Host: 0.0.0.0"
 echo "Port: ${PORT:-8000}"
 echo "================================"
 
+# Test if we can import the app before starting
+echo "Testing app import..."
+python3 -c "from api_server import app; print('App imported successfully')" || {
+    echo "ERROR: Failed to import app!"
+    exit 1
+}
+
 # Use exec to replace shell process with uvicorn
-exec python3 -m uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info
+# Use python3 -m uvicorn for better reliability
+exec python3 -m uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info --access-log
 EOF
 
 # Run the server with Xvfb and VNC
