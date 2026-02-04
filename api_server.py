@@ -19,10 +19,12 @@ from typing import Dict, Optional, List
 from datetime import datetime
 from enum import Enum
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
+from fastapi.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware as StarletteBaseHTTPMiddleware
 
 # Import the downloader class
 sys.path.insert(0, str(Path(__file__).parent))
@@ -54,11 +56,13 @@ logger = logging.getLogger(__name__)
 logger.info(f"[CORS] Configured allowed origins: {allowed_origins}")
 
 # Add CORS middleware - must be added before routes
+# Using allow_origin_regex for more flexible matching if needed
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,  # List of allowed origins
+    allow_origin_regex=r"https://.*\.vercel\.app",  # Also allow any Vercel subdomain
     allow_credentials=True,  # Allow cookies/auth headers
-    allow_methods=["*"],  # Allow all HTTP methods
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"],  # Explicit methods
     allow_headers=["*"],  # Allow all headers
     expose_headers=["*"],  # Expose all headers
     max_age=3600,  # Cache preflight requests for 1 hour
