@@ -104,26 +104,34 @@ RUN git clone --depth 1 https://github.com/novnc/noVNC.git /opt/novnc && \
     ln -s /opt/novnc/vnc.html /opt/novnc/index.html
 
 # Create startup script that starts Xvfb, VNC, noVNC, and the API server
-RUN echo '#!/bin/bash\n\
-# Start Xvfb virtual display\n\
-Xvfb :99 -screen 0 1024x768x24 -ac +extension GLX +render -noreset > /dev/null 2>&1 &\n\
-export DISPLAY=:99\n\
-\n\
-# Start window manager\n\
-fluxbox > /dev/null 2>&1 &\n\
-\n\
-# Start VNC server\n\
-x11vnc -display :99 -forever -shared -rfbport 5900 -nopw -xkb -bg > /dev/null 2>&1\n\
-\n\
-# Start noVNC web server (web-based VNC access)\n\
-/opt/novnc/utils/websockify/run --web=/opt/novnc --target-config=/tmp/vnc.json 6080 localhost:5900 > /dev/null 2>&1 &\n\
-\n\
-# Wait a moment for services to start\n\
-sleep 2\n\
-\n\
-# Start the API server\n\
-exec uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000}\n\
-' > /app/start.sh && chmod +x /app/start.sh
+RUN cat > /app/start.sh << 'EOF' && chmod +x /app/start.sh
+#!/bin/bash
+set -e
+
+# Start Xvfb virtual display
+Xvfb :99 -screen 0 1024x768x24 -ac +extension GLX +render -noreset > /dev/null 2>&1 &
+export DISPLAY=:99
+
+# Wait for Xvfb to start
+sleep 2
+
+# Start window manager
+fluxbox > /dev/null 2>&1 &
+
+# Start VNC server
+x11vnc -display :99 -forever -shared -rfbport 5900 -nopw -xkb -bg > /dev/null 2>&1 || true
+
+# Start noVNC web server (web-based VNC access) - only if websockify exists
+if [ -f /opt/novnc/utils/websockify/run ]; then
+    /opt/novnc/utils/websockify/run --web=/opt/novnc 6080 localhost:5900 > /dev/null 2>&1 &
+fi
+
+# Wait a moment for services to start
+sleep 2
+
+# Start the API server
+exec uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000}
+EOF
 
 # Run the server with Xvfb and VNC
 CMD ["/app/start.sh"]

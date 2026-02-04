@@ -21,10 +21,8 @@ from enum import Enum
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, Response
-from fastapi.middleware.base import BaseHTTPMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from starlette.middleware.base import BaseHTTPMiddleware as StarletteBaseHTTPMiddleware
 
 # Import the downloader class
 sys.path.insert(0, str(Path(__file__).parent))
