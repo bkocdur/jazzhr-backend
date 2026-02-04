@@ -30,6 +30,12 @@ from download_resumes_browser import JazzHRBrowserDownloader
 
 app = FastAPI(title="JazzHR Resume Downloader API")
 
+# Add explicit OPTIONS handler for CORS preflight
+@app.options("/{full_path:path}")
+async def options_handler(full_path: str):
+    """Handle CORS preflight requests"""
+    return {"message": "OK"}
+
 # CORS middleware to allow frontend requests
 # Allow localhost for local development and Vercel domain for production
 allowed_origins = [
