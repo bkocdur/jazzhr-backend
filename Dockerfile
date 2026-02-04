@@ -94,9 +94,9 @@ ENV PYTHONUNBUFFERED=1
 ENV HEADLESS=false
 ENV FORCE_HEADLESS=false
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/docs || exit 1
+# Health check - use the PORT environment variable
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
 # Install noVNC for web-based VNC access
 RUN git clone --depth 1 https://github.com/novnc/noVNC.git /opt/novnc && \
@@ -158,8 +158,9 @@ echo "Python path: $(python3 -c 'import sys; print(sys.path)')"
 echo "================================"
 
 # Use exec to replace shell process
-# Don't use --log-level info as it might cause issues, use default
-exec python3 -m uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000}
+# Use --timeout-keep-alive to prevent connection issues
+# Railway uses port from PORT env var (usually 8080 or dynamic)
+exec python3 -m uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000} --timeout-keep-alive 75
 EOF
 
 # Run the server with Xvfb and VNC

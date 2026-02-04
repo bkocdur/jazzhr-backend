@@ -342,8 +342,8 @@ async def root(request: Request):
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy"}
+    """Health check endpoint for Railway and monitoring."""
+    return {"status": "healthy", "service": "jazzhr-backend"}
 
 @app.post("/api/downloads/start", response_model=StartDownloadResponse)
 async def start_download(request: StartDownloadRequest, background_tasks: BackgroundTasks):
