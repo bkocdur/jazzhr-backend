@@ -108,29 +108,38 @@ RUN cat > /app/start.sh << 'EOF' && chmod +x /app/start.sh
 #!/bin/bash
 set -e
 
+echo "Starting JazzHR Backend..."
+
 # Start Xvfb virtual display
-Xvfb :99 -screen 0 1024x768x24 -ac +extension GLX +render -noreset > /dev/null 2>&1 &
+echo "Starting Xvfb..."
+Xvfb :99 -screen 0 1024x768x24 -ac +extension GLX +render -noreset > /tmp/xvfb.log 2>&1 &
 export DISPLAY=:99
 
 # Wait for Xvfb to start
-sleep 2
+sleep 3
 
 # Start window manager
-fluxbox > /dev/null 2>&1 &
+echo "Starting fluxbox..."
+fluxbox > /tmp/fluxbox.log 2>&1 &
 
 # Start VNC server
-x11vnc -display :99 -forever -shared -rfbport 5900 -nopw -xkb -bg > /dev/null 2>&1 || true
+echo "Starting VNC server..."
+x11vnc -display :99 -forever -shared -rfbport 5900 -nopw -xkb -bg > /tmp/vnc.log 2>&1 || echo "VNC server failed to start (non-critical)"
 
 # Start noVNC web server (web-based VNC access) - only if websockify exists
 if [ -f /opt/novnc/utils/websockify/run ]; then
-    /opt/novnc/utils/websockify/run --web=/opt/novnc 6080 localhost:5900 > /dev/null 2>&1 &
+    echo "Starting noVNC..."
+    /opt/novnc/utils/websockify/run --web=/opt/novnc 6080 localhost:5900 > /tmp/novnc.log 2>&1 &
+else
+    echo "noVNC websockify not found, skipping..."
 fi
 
 # Wait a moment for services to start
 sleep 2
 
 # Start the API server
-exec uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000}
+echo "Starting FastAPI server on port ${PORT:-8000}..."
+exec uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info
 EOF
 
 # Run the server with Xvfb and VNC
