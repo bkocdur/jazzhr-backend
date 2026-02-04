@@ -70,7 +70,8 @@ app.add_middleware(
 # In-memory store for download state
 downloads: Dict[str, Dict] = {}
 # Store active downloaders and futures for cancellation
-active_downloaders: Dict[str, JazzHRBrowserDownloader] = {}
+# Using Any type to avoid import at module level
+active_downloaders: Dict[str, any] = {}  # type: ignore
 active_futures: Dict[str, asyncio.Future] = {}
 
 
