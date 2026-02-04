@@ -170,6 +170,10 @@ async def run_download(download_id: str, job_id: str, output_dir: str = "resumes
             except json.JSONDecodeError:
                 logging.warning("Failed to parse JAZZHR_COOKIES environment variable")
         
+        # Import downloader class here (lazy import to avoid startup errors)
+        sys.path.insert(0, str(Path(__file__).parent))
+        from download_resumes_browser import JazzHRBrowserDownloader
+        
         # Create downloader instance with specified output directory and cookies
         downloader = JazzHRBrowserDownloader(job_id, output_dir=output_dir, cookies=cookies)
         
