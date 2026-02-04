@@ -297,23 +297,28 @@ async def run_download(download_id: str, job_id: str, output_dir: str = "resumes
         download_state["completed_at"] = datetime.now().isoformat()
 
 
-# Add explicit OPTIONS handler for all routes to ensure CORS preflight works
+# Note: FastAPI CORSMiddleware should handle OPTIONS automatically
+# But we add explicit handler as fallback to ensure CORS works
 @app.options("/{full_path:path}")
 async def options_handler(full_path: str, request: Request):
-    """Handle CORS preflight requests explicitly."""
-    origin = request.headers.get("origin")
-    if origin and (origin in allowed_origins or origin.endswith(".vercel.app")):
-        from fastapi.responses import Response
+    """Handle CORS preflight requests explicitly as fallback."""
+    origin = request.headers.get("origin", "")
+    # Check if origin is allowed
+    is_allowed = origin in allowed_origins or (origin.startswith("https://") and origin.endswith(".vercel.app"))
+    
+    if is_allowed:
         return Response(
             status_code=200,
             headers={
                 "Access-Control-Allow-Origin": origin,
                 "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD",
-                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
                 "Access-Control-Allow-Credentials": "true",
                 "Access-Control-Max-Age": "3600",
             }
         )
+    # If origin not allowed, still return 200 but without CORS headers
+    # (middleware should have handled this, but just in case)
     return Response(status_code=200)
 
 @app.get("/")
