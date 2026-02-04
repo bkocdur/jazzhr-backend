@@ -24,9 +24,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 
-# Import the downloader class
-sys.path.insert(0, str(Path(__file__).parent))
-from download_resumes_browser import JazzHRBrowserDownloader
+# Import the downloader class (lazy import to avoid startup errors)
+# We'll import it only when needed in the download function
+# sys.path.insert(0, str(Path(__file__).parent))
+# from download_resumes_browser import JazzHRBrowserDownloader
 
 app = FastAPI(title="JazzHR Resume Downloader API")
 
