@@ -11,8 +11,9 @@ import sys
 import time
 import logging
 import re
+import json
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -37,13 +38,14 @@ logger = logging.getLogger(__name__)
 class JazzHRBrowserDownloader:
     """Browser automation class for downloading resumes from JazzHR."""
     
-    def __init__(self, job_id: str, output_dir: str = "resumes"):
+    def __init__(self, job_id: str, output_dir: str = "resumes", cookies: Optional[List[Dict]] = None):
         """
         Initialize the browser downloader.
         
         Args:
             job_id: The job ID to download resumes for
             output_dir: Base directory for downloaded resumes
+            cookies: Optional list of cookies to load into browser (for authentication)
         """
         self.job_id = job_id
         self.output_dir = Path(output_dir) / f"job_{job_id}"
@@ -55,6 +57,7 @@ class JazzHRBrowserDownloader:
         self.downloaded_candidate_ids = set()  # Track unique candidate IDs downloaded
         self.all_candidate_ids = set()  # Track all candidate IDs found
         self.cancelled = False  # Flag to check for cancellation
+        self.cookies = cookies  # Store cookies for authentication
         
     def setup_driver(self):
         """Set up Chrome WebDriver with download preferences."""
@@ -101,8 +104,52 @@ class JazzHRBrowserDownloader:
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
             self.driver.maximize_window()
             logger.info("Chrome WebDriver initialized successfully")
+            
+            # Load cookies if provided (for authentication in headless mode)
+            if self.cookies:
+                self.load_cookies()
         except Exception as e:
             logger.error(f"Failed to initialize WebDriver: {e}")
+            raise
+    
+    def load_cookies(self):
+        """Load cookies into the browser for authentication."""
+        if not self.cookies:
+            return
+        
+        try:
+            logger.info("Loading authentication cookies...")
+            # First navigate to the domain to set cookies
+            self.driver.get("https://app.jazz.co")
+            time.sleep(2)
+            
+            # Add each cookie
+            for cookie in self.cookies:
+                try:
+                    # Ensure cookie has required fields
+                    if 'name' in cookie and 'value' in cookie:
+                        # Remove 'expiry' if it's too large (Selenium limitation)
+                        cookie_to_add = {
+                            'name': cookie['name'],
+                            'value': cookie['value'],
+                            'domain': cookie.get('domain', '.jazz.co'),
+                            'path': cookie.get('path', '/'),
+                        }
+                        # Only add secure/httpOnly if they exist
+                        if 'secure' in cookie:
+                            cookie_to_add['secure'] = cookie['secure']
+                        if 'httpOnly' in cookie:
+                            cookie_to_add['httpOnly'] = cookie['httpOnly']
+                        
+                        self.driver.add_cookie(cookie_to_add)
+                        logger.debug(f"Added cookie: {cookie['name']}")
+                except Exception as e:
+                    logger.warning(f"Failed to add cookie {cookie.get('name', 'unknown')}: {e}")
+                    continue
+            
+            logger.info(f"Successfully loaded {len(self.cookies)} cookies")
+        except Exception as e:
+            logger.error(f"Error loading cookies: {e}")
             raise
     
     def check_login_required(self) -> bool:
@@ -205,11 +252,35 @@ class JazzHRBrowserDownloader:
         logger.info(f"Login required check: {login_required}")
         
         if login_required:
-            logger.info("Login is required. Waiting for user to log in...")
-            login_success = self.wait_for_login()
-            if not login_success:
-                logger.error("Login failed or timed out. Cannot continue with download.")
-                raise Exception("Login failed or timed out")
+            # Check if we're in headless mode
+            use_headless = os.getenv("HEADLESS", "false").lower() == "true" or os.getenv("DISPLAY") is not None
+            
+            if use_headless and not self.cookies:
+                logger.error("=" * 60)
+                logger.error("LOGIN REQUIRED IN HEADLESS MODE")
+                logger.error("=" * 60)
+                logger.error("Cannot perform manual login in headless mode.")
+                logger.error("Please provide authentication cookies via:")
+                logger.error("1. JAZZHR_COOKIES environment variable (JSON string)")
+                logger.error("2. Or cookies parameter when calling the API")
+                logger.error("=" * 60)
+                raise Exception("Login required but no cookies provided for headless mode")
+            
+            if not use_headless:
+                logger.info("Login is required. Waiting for user to log in...")
+                login_success = self.wait_for_login()
+                if not login_success:
+                    logger.error("Login failed or timed out. Cannot continue with download.")
+                    raise Exception("Login failed or timed out")
+            else:
+                # In headless mode with cookies, try reloading page
+                logger.info("Reloading page with cookies...")
+                self.driver.get(url)
+                time.sleep(5)
+                # Check again if login is still required
+                if self.check_login_required():
+                    logger.error("Cookies provided but login still required. Cookies may be invalid or expired.")
+                    raise Exception("Authentication failed: Invalid or expired cookies")
             # Navigate again after login
             logger.info("Navigating to candidate list after successful login...")
             self.driver.get(url)

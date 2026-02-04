@@ -71,6 +71,7 @@ class DownloadStatus(str, Enum):
 class StartDownloadRequest(BaseModel):
     job_id: str
     output_dir: Optional[str] = "resumes"
+    cookies: Optional[List[Dict]] = None  # Optional cookies for authentication
 
 
 class StartDownloadResponse(BaseModel):
@@ -130,7 +131,7 @@ def parse_progress_from_log(log_line: str, current_state: Dict) -> Optional[Dict
     return None
 
 
-async def run_download(download_id: str, job_id: str, output_dir: str = "resumes"):
+async def run_download(download_id: str, job_id: str, output_dir: str = "resumes", cookies: Optional[List[Dict]] = None):
     """
     Run the download script in a background task.
     Updates download state and sends progress via the downloads dict.
@@ -140,8 +141,18 @@ async def run_download(download_id: str, job_id: str, output_dir: str = "resumes
     download_state["started_at"] = datetime.now().isoformat()
     
     try:
-        # Create downloader instance with specified output directory
-        downloader = JazzHRBrowserDownloader(job_id, output_dir=output_dir)
+        # Get cookies from parameter, download state, or environment variable
+        if cookies is None:
+            cookies = download_state.get("cookies")
+        
+        if cookies is None and os.getenv("JAZZHR_COOKIES"):
+            try:
+                cookies = json.loads(os.getenv("JAZZHR_COOKIES"))
+            except json.JSONDecodeError:
+                logging.warning("Failed to parse JAZZHR_COOKIES environment variable")
+        
+        # Create downloader instance with specified output directory and cookies
+        downloader = JazzHRBrowserDownloader(job_id, output_dir=output_dir, cookies=cookies)
         
         # Store downloader reference for cancellation
         active_downloaders[download_id] = downloader
@@ -285,10 +296,11 @@ async def start_download(request: StartDownloadRequest, background_tasks: Backgr
         "percentage": 0,
         "message": "Initializing download...",
         "logs": [],
+        "cookies": request.cookies,  # Store cookies for use in download task
     }
     
     # Start download in background
-    background_tasks.add_task(run_download, download_id, job_id, output_dir)
+    background_tasks.add_task(run_download, download_id, job_id, output_dir, request.cookies)
     
     return StartDownloadResponse(
         download_id=download_id,
