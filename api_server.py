@@ -30,13 +30,8 @@ from download_resumes_browser import JazzHRBrowserDownloader
 
 app = FastAPI(title="JazzHR Resume Downloader API")
 
-# Add explicit OPTIONS handler for CORS preflight
-@app.options("/{full_path:path}")
-async def options_handler(full_path: str):
-    """Handle CORS preflight requests"""
-    return {"message": "OK"}
-
 # CORS middleware to allow frontend requests
+# IMPORTANT: CORS middleware must be added BEFORE routes
 # Allow localhost for local development and Vercel domain for production
 allowed_origins = [
     "http://localhost:3000",
@@ -53,14 +48,17 @@ if os.getenv("CORS_ORIGINS"):
     print(f"[CORS] Additional origins from env: {additional_origins}")
 
 # Log allowed origins for debugging
-print(f"[CORS] Allowed origins: {allowed_origins}")
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+logger.info(f"[CORS] Configured allowed origins: {allowed_origins}")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
     expose_headers=["*"],
     max_age=3600,  # Cache preflight requests for 1 hour
 )
@@ -298,6 +296,10 @@ async def run_download(download_id: str, job_id: str, output_dir: str = "resumes
 
 @app.post("/api/downloads/start", response_model=StartDownloadResponse)
 async def start_download(request: StartDownloadRequest, background_tasks: BackgroundTasks):
+    """
+    Start a new resume download job.
+    Handles CORS preflight automatically via CORSMiddleware.
+    """
     """Start a new download for the given job ID."""
     job_id = request.job_id.strip()
     output_dir = (request.output_dir or "resumes").strip()
