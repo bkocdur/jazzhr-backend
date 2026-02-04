@@ -103,50 +103,41 @@ RUN git clone --depth 1 https://github.com/novnc/noVNC.git /opt/novnc && \
     git clone --depth 1 https://github.com/novnc/websockify.git /opt/novnc/utils/websockify && \
     ln -s /opt/novnc/vnc.html /opt/novnc/index.html
 
-# Create startup script that starts Xvfb, VNC, noVNC, and the API server
+# Create startup script - simplified version that starts the API server first
+# Xvfb/VNC can be started later if needed for browser automation
 RUN cat > /app/start.sh << 'EOF' && chmod +x /app/start.sh
 #!/bin/bash
 set -e
 
 echo "=== Starting JazzHR Backend ==="
 echo "PORT: ${PORT:-8000}"
-echo "DISPLAY: ${DISPLAY:-:99}"
 
-# Start Xvfb virtual display (required for browser automation)
-echo "Starting Xvfb..."
-Xvfb :99 -screen 0 1024x768x24 -ac +extension GLX +render -noreset > /tmp/xvfb.log 2>&1 &
+# Set display for browser automation (will be used when needed)
 export DISPLAY=:99
 
-# Wait for Xvfb to start
-sleep 3
-echo "Xvfb started"
-
-# Start window manager (optional, for VNC)
-echo "Starting fluxbox..."
-fluxbox > /tmp/fluxbox.log 2>&1 &
-sleep 1
-
-# Start VNC server (optional, for remote browser access)
-echo "Starting VNC server..."
-x11vnc -display :99 -forever -shared -rfbport 5900 -nopw -xkb -bg > /tmp/vnc.log 2>&1 || echo "VNC server failed (non-critical)"
-
-# Start noVNC web server (optional, for web-based VNC access)
-if [ -f /opt/novnc/utils/websockify/run ]; then
-    echo "Starting noVNC..."
-    /opt/novnc/utils/websockify/run --web=/opt/novnc 6080 localhost:5900 > /tmp/novnc.log 2>&1 &
-else
-    echo "noVNC not found, skipping..."
-fi
-
-# Wait for services to stabilize
+# Start Xvfb in background (non-blocking, for browser automation)
+echo "Starting Xvfb..."
+Xvfb :99 -screen 0 1024x768x24 -ac +extension GLX +render -noreset > /tmp/xvfb.log 2>&1 &
 sleep 2
 
-# Verify Python and uvicorn are available
-echo "Checking Python..."
-python3 --version || echo "Python check failed"
+# Start window manager (for VNC, optional)
+fluxbox > /tmp/fluxbox.log 2>&1 &
 
-echo "Checking uvicorn..."
-python3 -c "import uvicorn; print('uvicorn OK')" || echo "uvicorn import failed"
+# Start VNC server (optional, for remote browser access)
+x11vnc -display :99 -forever -shared -rfbport 5900 -nopw -xkb -bg > /tmp/vnc.log 2>&1 || true
+
+# Start noVNC (optional)
+if [ -f /opt/novnc/utils/websockify/run ]; then
+    /opt/novnc/utils/websockify/run --web=/opt/novnc 6080 localhost:5900 > /tmp/novnc.log 2>&1 &
+fi
+
+# Test app import
+echo "Testing app import..."
+python3 -c "from api_server import app; print('✓ App imported successfully')" || {
+    echo "✗ ERROR: Failed to import app!"
+    python3 -c "import sys; sys.path.insert(0, '.'); from api_server import app" 2>&1 || true
+    exit 1
+}
 
 # Start the API server
 echo "=== Starting FastAPI server ==="
@@ -154,16 +145,8 @@ echo "Host: 0.0.0.0"
 echo "Port: ${PORT:-8000}"
 echo "================================"
 
-# Test if we can import the app before starting
-echo "Testing app import..."
-python3 -c "from api_server import app; print('App imported successfully')" || {
-    echo "ERROR: Failed to import app!"
-    exit 1
-}
-
-# Use exec to replace shell process with uvicorn
-# Use python3 -m uvicorn for better reliability
-exec python3 -m uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info --access-log
+# Use exec to replace shell process
+exec python3 -m uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info
 EOF
 
 # Run the server with Xvfb and VNC
