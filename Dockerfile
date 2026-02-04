@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
     xterm \
     ca-certificates \
     python3-numpy \
-    git
+    git \
     fonts-liberation \
     libappindicator3-1 \
     libasound2 \
