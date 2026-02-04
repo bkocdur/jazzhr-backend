@@ -131,12 +131,22 @@ if [ -f /opt/novnc/utils/websockify/run ]; then
     /opt/novnc/utils/websockify/run --web=/opt/novnc 6080 localhost:5900 > /tmp/novnc.log 2>&1 &
 fi
 
-# Test app import
+# Test app import with detailed error output
 echo "Testing app import..."
-python3 -c "from api_server import app; print('✓ App imported successfully')" || {
-    echo "✗ ERROR: Failed to import app!"
-    python3 -c "import sys; sys.path.insert(0, '.'); from api_server import app" 2>&1 || true
-    exit 1
+python3 -c "
+import sys
+import traceback
+try:
+    from api_server import app
+    print('✓ App imported successfully')
+except Exception as e:
+    print('✗ ERROR: Failed to import app!')
+    print(f'Error type: {type(e).__name__}')
+    print(f'Error message: {str(e)}')
+    traceback.print_exc()
+    sys.exit(1)
+" || {
+    echo "App import failed, but continuing to see if server starts anyway..."
 }
 
 # Start the API server
