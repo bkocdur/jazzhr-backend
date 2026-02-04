@@ -108,38 +108,54 @@ RUN cat > /app/start.sh << 'EOF' && chmod +x /app/start.sh
 #!/bin/bash
 set -e
 
-echo "Starting JazzHR Backend..."
+echo "=== Starting JazzHR Backend ==="
+echo "PORT: ${PORT:-8000}"
+echo "DISPLAY: ${DISPLAY:-:99}"
 
-# Start Xvfb virtual display
+# Start Xvfb virtual display (required for browser automation)
 echo "Starting Xvfb..."
 Xvfb :99 -screen 0 1024x768x24 -ac +extension GLX +render -noreset > /tmp/xvfb.log 2>&1 &
 export DISPLAY=:99
 
 # Wait for Xvfb to start
 sleep 3
+echo "Xvfb started"
 
-# Start window manager
+# Start window manager (optional, for VNC)
 echo "Starting fluxbox..."
 fluxbox > /tmp/fluxbox.log 2>&1 &
+sleep 1
 
-# Start VNC server
+# Start VNC server (optional, for remote browser access)
 echo "Starting VNC server..."
-x11vnc -display :99 -forever -shared -rfbport 5900 -nopw -xkb -bg > /tmp/vnc.log 2>&1 || echo "VNC server failed to start (non-critical)"
+x11vnc -display :99 -forever -shared -rfbport 5900 -nopw -xkb -bg > /tmp/vnc.log 2>&1 || echo "VNC server failed (non-critical)"
 
-# Start noVNC web server (web-based VNC access) - only if websockify exists
+# Start noVNC web server (optional, for web-based VNC access)
 if [ -f /opt/novnc/utils/websockify/run ]; then
     echo "Starting noVNC..."
     /opt/novnc/utils/websockify/run --web=/opt/novnc 6080 localhost:5900 > /tmp/novnc.log 2>&1 &
 else
-    echo "noVNC websockify not found, skipping..."
+    echo "noVNC not found, skipping..."
 fi
 
-# Wait a moment for services to start
+# Wait for services to stabilize
 sleep 2
 
+# Verify Python and uvicorn are available
+echo "Checking Python..."
+python3 --version || echo "Python check failed"
+
+echo "Checking uvicorn..."
+python3 -c "import uvicorn; print('uvicorn OK')" || echo "uvicorn import failed"
+
 # Start the API server
-echo "Starting FastAPI server on port ${PORT:-8000}..."
-exec uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info
+echo "=== Starting FastAPI server ==="
+echo "Host: 0.0.0.0"
+echo "Port: ${PORT:-8000}"
+echo "================================"
+
+# Use exec to replace shell process with uvicorn
+exec python3 -m uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info
 EOF
 
 # Run the server with Xvfb and VNC
