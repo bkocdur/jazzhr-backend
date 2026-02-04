@@ -94,9 +94,8 @@ ENV PYTHONUNBUFFERED=1
 ENV HEADLESS=false
 ENV FORCE_HEADLESS=false
 
-# Health check - use the PORT environment variable
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
+# Note: Railway handles health checks automatically
+# No need for Docker HEALTHCHECK as Railway monitors the service
 
 # Install noVNC for web-based VNC access
 RUN git clone --depth 1 https://github.com/novnc/noVNC.git /opt/novnc && \
