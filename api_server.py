@@ -299,12 +299,26 @@ async def run_download(download_id: str, job_id: str, output_dir: str = "resumes
         download_state["completed_at"] = datetime.now().isoformat()
 
 
+@app.get("/")
+async def root(request: Request):
+    """Root endpoint to verify server is running and CORS is configured."""
+    origin = request.headers.get("origin", "none")
+    return {
+        "message": "JazzHR Resume Downloader API",
+        "status": "running",
+        "cors_enabled": True,
+        "allowed_origins": allowed_origins,
+        "request_origin": origin,
+        "origin_allowed": origin in allowed_origins or (origin.startswith("https://") and origin.endswith(".vercel.app"))
+    }
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {"status": "healthy"}
+
 @app.post("/api/downloads/start", response_model=StartDownloadResponse)
 async def start_download(request: StartDownloadRequest, background_tasks: BackgroundTasks):
-    """
-    Start a new resume download job.
-    Handles CORS preflight automatically via CORSMiddleware.
-    """
     """Start a new download for the given job ID."""
     job_id = request.job_id.strip()
     output_dir = (request.output_dir or "resumes").strip()
