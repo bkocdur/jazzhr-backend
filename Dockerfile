@@ -158,9 +158,10 @@ echo "Python path: $(python3 -c 'import sys; print(sys.path)')"
 echo "================================"
 
 # Use exec to replace shell process
+# Railway uses PORT env var (usually 8080)
 # Use --timeout-keep-alive to prevent connection issues
-# Railway uses port from PORT env var (usually 8080 or dynamic)
-exec python3 -m uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000} --timeout-keep-alive 75
+# Use --workers 1 for single process (Railway doesn't need multiple workers)
+exec python3 -m uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000} --timeout-keep-alive 75 --workers 1
 EOF
 
 # Run the server with Xvfb and VNC
