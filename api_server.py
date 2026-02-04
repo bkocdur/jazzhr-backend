@@ -53,15 +53,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 logger.info(f"[CORS] Configured allowed origins: {allowed_origins}")
 
-# Add CORS middleware - must be added before routes
-# Using allow_origin_regex for more flexible matching if needed
+# Add CORS middleware - MUST be added before routes
+# This handles OPTIONS preflight requests automatically
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,  # List of allowed origins
     allow_origin_regex=r"https://.*\.vercel\.app",  # Also allow any Vercel subdomain
     allow_credentials=True,  # Allow cookies/auth headers
-    allow_methods=["*"],  # Allow all HTTP methods
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"],  # Explicit methods
+    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With", "*"],  # All headers
     expose_headers=["*"],  # Expose all headers
     max_age=3600,  # Cache preflight requests for 1 hour
 )
