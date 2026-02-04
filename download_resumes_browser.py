@@ -255,32 +255,47 @@ class JazzHRBrowserDownloader:
             # Check if we're in headless mode
             use_headless = os.getenv("HEADLESS", "false").lower() == "true" or os.getenv("DISPLAY") is not None
             
-            if use_headless and not self.cookies:
-                logger.error("=" * 60)
-                logger.error("LOGIN REQUIRED IN HEADLESS MODE")
-                logger.error("=" * 60)
-                logger.error("Cannot perform manual login in headless mode.")
-                logger.error("Please provide authentication cookies via:")
-                logger.error("1. JAZZHR_COOKIES environment variable (JSON string)")
-                logger.error("2. Or cookies parameter when calling the API")
-                logger.error("=" * 60)
-                raise Exception("Login required but no cookies provided for headless mode")
-            
-            if not use_headless:
+            if use_headless:
+                # In headless mode, we need cookies from user
+                if self.cookies:
+                    # Try reloading page with cookies
+                    logger.info("Reloading page with provided cookies...")
+                    self.driver.get(url)
+                    time.sleep(5)
+                    # Check again if login is still required
+                    if self.check_login_required():
+                        logger.error("Cookies provided but login still required. Cookies may be invalid or expired.")
+                        raise Exception("Authentication failed: Invalid or expired cookies. Please log in again and provide fresh cookies.")
+                else:
+                    # No cookies provided - user needs to authenticate
+                    logger.error("=" * 60)
+                    logger.error("LOGIN REQUIRED")
+                    logger.error("=" * 60)
+                    logger.error("JazzHR requires authentication to access this job.")
+                    logger.error("")
+                    logger.error("To authenticate:")
+                    logger.error("1. Log in to JazzHR in your browser: https://app.jazz.co")
+                    logger.error("2. Open browser DevTools (F12)")
+                    logger.error("3. Go to Application → Cookies → https://app.jazz.co")
+                    logger.error("4. Copy your session cookies")
+                    logger.error("5. Provide them when starting the download")
+                    logger.error("")
+                    logger.error("The download will pause here. Please provide authentication cookies.")
+                    logger.error("=" * 60)
+                    raise Exception("LOGIN_REQUIRED: Please authenticate by providing JazzHR session cookies. See logs for instructions.")
+            else:
+                # Non-headless mode - user can log in directly in browser window
                 logger.info("Login is required. Waiting for user to log in...")
+                logger.info("=" * 60)
+                logger.info("LOGIN REQUIRED")
+                logger.info("=" * 60)
+                logger.info("Please log in to JazzHR in the browser window that opened.")
+                logger.info("The script will automatically detect when login is complete.")
+                logger.info("=" * 60)
                 login_success = self.wait_for_login()
                 if not login_success:
                     logger.error("Login failed or timed out. Cannot continue with download.")
                     raise Exception("Login failed or timed out")
-            else:
-                # In headless mode with cookies, try reloading page
-                logger.info("Reloading page with cookies...")
-                self.driver.get(url)
-                time.sleep(5)
-                # Check again if login is still required
-                if self.check_login_required():
-                    logger.error("Cookies provided but login still required. Cookies may be invalid or expired.")
-                    raise Exception("Authentication failed: Invalid or expired cookies")
             # Navigate again after login
             logger.info("Navigating to candidate list after successful login...")
             self.driver.get(url)

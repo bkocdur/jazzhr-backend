@@ -66,12 +66,16 @@ class DownloadStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    LOGIN_REQUIRED = "login_required"  # Special status for when user needs to authenticate
 
 
 class StartDownloadRequest(BaseModel):
     job_id: str
     output_dir: Optional[str] = "resumes"
     cookies: Optional[List[Dict]] = None  # Optional cookies for authentication
+
+class ProvideCookiesRequest(BaseModel):
+    cookies: List[Dict]  # Required cookies for authentication
 
 
 class StartDownloadResponse(BaseModel):
@@ -238,8 +242,15 @@ async def run_download(download_id: str, job_id: str, output_dir: str = "resumes
                 if downloader.cancelled:
                     download_state["status"] = DownloadStatus.CANCELLED
                 else:
-                    download_state["status"] = DownloadStatus.FAILED
-                    download_state["error"] = str(e)
+                    error_msg = str(e)
+                    # Check if this is a login required error
+                    if "LOGIN_REQUIRED" in error_msg:
+                        download_state["status"] = "login_required"
+                        download_state["error"] = error_msg
+                        download_state["message"] = "Authentication required. Please provide JazzHR login cookies."
+                    else:
+                        download_state["status"] = DownloadStatus.FAILED
+                        download_state["error"] = error_msg
                 download_state["completed_at"] = datetime.now().isoformat()
                 download_state["logs"] = log_entries
             finally:
@@ -490,6 +501,51 @@ async def cancel_download(download_id: str):
     # This would require storing the process reference
     
     return {"message": "Download cancelled", "download_id": download_id, "status": "cancelled"}
+
+
+@app.post("/api/downloads/{download_id}/authenticate")
+async def provide_authentication(download_id: str, request: ProvideCookiesRequest, background_tasks: BackgroundTasks):
+    """Provide authentication cookies for a download that requires login."""
+    if download_id not in downloads:
+        raise HTTPException(status_code=404, detail="Download not found")
+    
+    download_state = downloads[download_id]
+    
+    # Check if download is in login_required state
+    if download_state["status"] != "login_required":
+        raise HTTPException(status_code=400, detail=f"Download is not waiting for authentication. Current status: {download_state['status']}")
+    
+    # Store cookies and restart download
+    download_state["cookies"] = request.cookies
+    download_state["status"] = DownloadStatus.PENDING
+    download_state["message"] = "Authentication provided. Restarting download..."
+    download_state["logs"].append({
+        "timestamp": datetime.now().strftime('%H:%M:%S'),
+        "message": "Authentication cookies provided. Restarting download...",
+        "type": "info"
+    })
+    
+    # Get job_id and output_dir from download state
+    job_id = download_state["job_id"]
+    output_dir = download_state.get("output_dir", "resumes")
+    
+    # Cancel any existing downloader
+    if download_id in active_downloaders:
+        try:
+            active_downloaders[download_id].cancelled = True
+            if active_downloaders[download_id].driver:
+                active_downloaders[download_id].driver.quit()
+        except:
+            pass
+    
+    # Restart the download with cookies
+    background_tasks.add_task(run_download, download_id, job_id, output_dir, request.cookies)
+    
+    return {
+        "message": "Authentication provided. Download restarted.",
+        "download_id": download_id,
+        "status": "restarted"
+    }
 
 
 if __name__ == "__main__":
