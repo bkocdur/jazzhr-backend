@@ -1,12 +1,15 @@
 FROM python:3.11-slim
 
-# Install system dependencies for Chrome
+# Install system dependencies for Chrome and X11/VNC support
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
     unzip \
     curl \
     xvfb \
+    x11vnc \
+    fluxbox \
+    xterm \
     ca-certificates \
     fonts-liberation \
     libappindicator3-1 \
@@ -75,18 +78,41 @@ COPY download_resumes_browser.py .
 # Create directory for downloads
 RUN mkdir -p /app/resumes
 
-# Expose port
+# Expose ports
 EXPOSE 8000
+EXPOSE 5900
 
-# Set environment variables for headless Chrome
+# Set environment variables for Chrome
+# Use Xvfb virtual display for GUI support (allows non-headless mode when needed)
 ENV DISPLAY=:99
 ENV CHROME_BIN=/usr/bin/google-chrome
 ENV CHROMEDRIVER_PATH=/usr/local/bin/chromedriver
 ENV PYTHONUNBUFFERED=1
+ENV HEADLESS=false
+ENV FORCE_HEADLESS=false
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/docs || exit 1
 
-# Run the server
-CMD ["uvicorn", "api_server:app", "--host", "0.0.0.0", "--port", "8000"]
+# Create startup script that starts Xvfb, VNC, and the API server
+RUN echo '#!/bin/bash\n\
+# Start Xvfb virtual display\n\
+Xvfb :99 -screen 0 1024x768x24 -ac +extension GLX +render -noreset > /dev/null 2>&1 &\n\
+export DISPLAY=:99\n\
+\n\
+# Start window manager\n\
+fluxbox > /dev/null 2>&1 &\n\
+\n\
+# Start VNC server (password: "password" - change in production)\n\
+x11vnc -display :99 -forever -shared -rfbport 5900 -nopw -xkb > /dev/null 2>&1 &\n\
+\n\
+# Wait a moment for services to start\n\
+sleep 2\n\
+\n\
+# Start the API server\n\
+exec uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000}\n\
+' > /app/start.sh && chmod +x /app/start.sh
+
+# Run the server with Xvfb and VNC
+CMD ["/app/start.sh"]

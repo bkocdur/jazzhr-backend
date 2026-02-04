@@ -366,6 +366,14 @@ async def get_download_progress(download_id: str):
                     "logs": formatted_logs,
                 }
                 
+                # If login is required, include VNC connection info
+                if status == "login_required":
+                    vnc_port = os.getenv("VNC_PORT", "5900")
+                    railway_public_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN", "")
+                    if railway_public_domain:
+                        progress_data["vnc_url"] = f"vnc://{railway_public_domain}:{vnc_port}"
+                        progress_data["message"] = f"Login required. Connect via VNC to log in: {progress_data['vnc_url']}"
+                
                 # Calculate estimated time remaining if we have progress
                 # Only calculate after minimum progress to avoid inaccurate early estimates
                 if current_state.get("total", 0) > 0 and current_state.get("current", 0) > 0:

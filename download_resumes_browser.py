@@ -81,9 +81,15 @@ class JazzHRBrowserDownloader:
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
         
-        # Use headless mode in production (when DISPLAY is set or HEADLESS env var is set)
-        # In local development, headless is disabled so user can login if needed
-        use_headless = os.getenv("HEADLESS", "false").lower() == "true" or os.getenv("DISPLAY") is not None
+        # Determine if we should use headless mode
+        # Allow disabling headless for user login interaction
+        force_headless = os.getenv("FORCE_HEADLESS", "false").lower() == "true"
+        use_headless = (os.getenv("HEADLESS", "false").lower() == "true" or os.getenv("DISPLAY") is not None) and force_headless
+        
+        # If login is needed, we'll disable headless temporarily (see navigate_to_candidate_list)
+        self.force_headless = force_headless
+        self.use_headless = use_headless
+        
         if use_headless:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("--headless=new")  # Use new headless mode
@@ -252,50 +258,82 @@ class JazzHRBrowserDownloader:
         logger.info(f"Login required check: {login_required}")
         
         if login_required:
-            # Check if we're in headless mode
-            use_headless = os.getenv("HEADLESS", "false").lower() == "true" or os.getenv("DISPLAY") is not None
-            
-            if use_headless:
-                # In headless mode, we need cookies from user
-                if self.cookies:
-                    # Try reloading page with cookies
-                    logger.info("Reloading page with provided cookies...")
-                    self.driver.get(url)
-                    time.sleep(5)
-                    # Check again if login is still required
-                    if self.check_login_required():
-                        logger.error("Cookies provided but login still required. Cookies may be invalid or expired.")
-                        raise Exception("Authentication failed: Invalid or expired cookies. Please log in again and provide fresh cookies.")
+            # Try to disable headless mode for user login if currently headless
+            if self.use_headless and not self.cookies:
+                logger.info("=" * 60)
+                logger.info("LOGIN REQUIRED - SWITCHING TO VISIBLE BROWSER")
+                logger.info("=" * 60)
+                logger.info("Restarting browser in visible mode for user login...")
+                logger.info("=" * 60)
+                
+                # Close current headless browser
+                try:
+                    self.driver.quit()
+                except:
+                    pass
+                
+                # Recreate browser without headless mode
+                chrome_options = Options()
+                download_dir = str(self.output_dir.absolute())
+                prefs = {
+                    "download.default_directory": download_dir,
+                    "download.prompt_for_download": False,
+                    "download.directory_upgrade": True,
+                    "safebrowsing.enabled": True,
+                    "profile.default_content_settings.popups": 0,
+                    "profile.content_settings.exceptions.automatic_downloads.*.setting": 1
+                }
+                chrome_options.add_experimental_option("prefs", prefs)
+                chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+                chrome_options.add_experimental_option('useAutomationExtension', False)
+                
+                # Disable headless for login
+                chrome_options.add_argument("--no-sandbox")
+                chrome_options.add_argument("--disable-dev-shm-usage")
+                chrome_options.add_argument("--disable-gpu")
+                chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+                
+                # Try to use Xvfb virtual display if available (for Docker/headless servers)
+                if os.getenv("DISPLAY"):
+                    # Xvfb is available, browser can run in "headless" but visible via VNC
+                    logger.info("Using virtual display for browser interaction")
                 else:
-                    # No cookies provided - user needs to authenticate
-                    logger.error("=" * 60)
-                    logger.error("LOGIN REQUIRED")
-                    logger.error("=" * 60)
-                    logger.error("JazzHR requires authentication to access this job.")
-                    logger.error("")
-                    logger.error("To authenticate:")
-                    logger.error("1. Log in to JazzHR in your browser: https://app.jazz.co")
-                    logger.error("2. Open browser DevTools (F12)")
-                    logger.error("3. Go to Application → Cookies → https://app.jazz.co")
-                    logger.error("4. Copy your session cookies")
-                    logger.error("5. Provide them when starting the download")
-                    logger.error("")
-                    logger.error("The download will pause here. Please provide authentication cookies.")
-                    logger.error("=" * 60)
-                    raise Exception("LOGIN_REQUIRED: Please authenticate by providing JazzHR session cookies. See logs for instructions.")
-            else:
-                # Non-headless mode - user can log in directly in browser window
-                logger.info("Login is required. Waiting for user to log in...")
-                logger.info("=" * 60)
-                logger.info("LOGIN REQUIRED")
-                logger.info("=" * 60)
-                logger.info("Please log in to JazzHR in the browser window that opened.")
-                logger.info("The script will automatically detect when login is complete.")
-                logger.info("=" * 60)
-                login_success = self.wait_for_login()
-                if not login_success:
-                    logger.error("Login failed or timed out. Cannot continue with download.")
-                    raise Exception("Login failed or timed out")
+                    # Check if VNC is available (Railway with VNC setup)
+                    vnc_available = os.path.exists('/usr/bin/x11vnc') or os.getenv("VNC_PORT")
+                    if vnc_available:
+                        logger.info("VNC server detected. Browser will be accessible via VNC.")
+                        logger.info("Users can connect to VNC to see and interact with the browser.")
+                    else:
+                        # No display/VNC available - need cookies
+                        logger.warning("No display or VNC available. Browser window cannot be shown.")
+                        logger.warning("Please provide authentication cookies via the frontend.")
+                        raise Exception("LOGIN_REQUIRED: No display available for browser interaction. Please provide JazzHR session cookies via the frontend.")
+                
+                # Create new browser instance (non-headless)
+                try:
+                    service = Service(ChromeDriverManager().install())
+                    self.driver = webdriver.Chrome(service=service, options=chrome_options)
+                    self.driver.maximize_window()
+                    logger.info("Browser restarted in visible mode")
+                    # Navigate to login page
+                    self.driver.get(url)
+                    time.sleep(3)
+                except Exception as e:
+                    logger.error(f"Failed to start visible browser: {e}")
+                    raise Exception("LOGIN_REQUIRED: Cannot start browser for user login. Please provide JazzHR session cookies via the frontend.")
+            
+            # Wait for user to log in (works for both initial non-headless and restarted browser)
+            logger.info("=" * 60)
+            logger.info("LOGIN REQUIRED")
+            logger.info("=" * 60)
+            logger.info("Please log in to JazzHR in the browser window.")
+            logger.info("The script will automatically detect when login is complete.")
+            logger.info("=" * 60)
+            
+            login_success = self.wait_for_login()
+            if not login_success:
+                logger.error("Login failed or timed out. Cannot continue with download.")
+                raise Exception("Login failed or timed out")
             # Navigate again after login
             logger.info("Navigating to candidate list after successful login...")
             self.driver.get(url)
