@@ -15,7 +15,7 @@ import subprocess
 import logging
 import io
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from datetime import datetime
 from enum import Enum
 
@@ -42,15 +42,21 @@ allowed_origins = [
 
 # Allow additional origins from environment variable (comma-separated)
 if os.getenv("CORS_ORIGINS"):
-    allowed_origins.extend([origin.strip() for origin in os.getenv("CORS_ORIGINS").split(",")])
+    additional_origins = [origin.strip() for origin in os.getenv("CORS_ORIGINS").split(",")]
+    allowed_origins.extend(additional_origins)
+    print(f"[CORS] Additional origins from env: {additional_origins}")
+
+# Log allowed origins for debugging
+print(f"[CORS] Allowed origins: {allowed_origins}")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
     expose_headers=["*"],
+    max_age=3600,  # Cache preflight requests for 1 hour
 )
 
 # In-memory store for download state
