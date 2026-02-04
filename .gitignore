@@ -1,0 +1,36 @@
+# Environment variables
+.env
+.env.local
+
+# Downloaded resumes
+resumes/
+
+# Frontend (separate repository)
+stitch-frontend/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.cursor/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+*.DS_Store
+
+# Job descriptions (may contain sensitive data)
+job_descriptions/
