@@ -153,10 +153,13 @@ except Exception as e:
 echo "=== Starting FastAPI server ==="
 echo "Host: 0.0.0.0"
 echo "Port: ${PORT:-8000}"
+echo "Working directory: $(pwd)"
+echo "Python path: $(python3 -c 'import sys; print(sys.path)')"
 echo "================================"
 
 # Use exec to replace shell process
-exec python3 -m uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info
+# Don't use --log-level info as it might cause issues, use default
+exec python3 -m uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000}
 EOF
 
 # Run the server with Xvfb and VNC
