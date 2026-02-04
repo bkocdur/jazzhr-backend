@@ -11,6 +11,8 @@ RUN apt-get update && apt-get install -y \
     fluxbox \
     xterm \
     ca-certificates \
+    python3-numpy \
+    git
     fonts-liberation \
     libappindicator3-1 \
     libasound2 \
@@ -81,6 +83,7 @@ RUN mkdir -p /app/resumes
 # Expose ports
 EXPOSE 8000
 EXPOSE 5900
+EXPOSE 6080
 
 # Set environment variables for Chrome
 # Use Xvfb virtual display for GUI support (allows non-headless mode when needed)
@@ -95,7 +98,12 @@ ENV FORCE_HEADLESS=false
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/docs || exit 1
 
-# Create startup script that starts Xvfb, VNC, and the API server
+# Install noVNC for web-based VNC access
+RUN git clone --depth 1 https://github.com/novnc/noVNC.git /opt/novnc && \
+    git clone --depth 1 https://github.com/novnc/websockify.git /opt/novnc/utils/websockify && \
+    ln -s /opt/novnc/vnc.html /opt/novnc/index.html
+
+# Create startup script that starts Xvfb, VNC, noVNC, and the API server
 RUN echo '#!/bin/bash\n\
 # Start Xvfb virtual display\n\
 Xvfb :99 -screen 0 1024x768x24 -ac +extension GLX +render -noreset > /dev/null 2>&1 &\n\
@@ -104,8 +112,11 @@ export DISPLAY=:99\n\
 # Start window manager\n\
 fluxbox > /dev/null 2>&1 &\n\
 \n\
-# Start VNC server (password: "password" - change in production)\n\
-x11vnc -display :99 -forever -shared -rfbport 5900 -nopw -xkb > /dev/null 2>&1 &\n\
+# Start VNC server\n\
+x11vnc -display :99 -forever -shared -rfbport 5900 -nopw -xkb -bg > /dev/null 2>&1\n\
+\n\
+# Start noVNC web server (web-based VNC access)\n\
+/opt/novnc/utils/websockify/run --web=/opt/novnc --target-config=/tmp/vnc.json 6080 localhost:5900 > /dev/null 2>&1 &\n\
 \n\
 # Wait a moment for services to start\n\
 sleep 2\n\

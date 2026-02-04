@@ -368,11 +368,15 @@ async def get_download_progress(download_id: str):
                 
                 # If login is required, include VNC connection info
                 if status == "login_required":
-                    vnc_port = os.getenv("VNC_PORT", "5900")
+                    # Try to get Railway public domain or use request host
                     railway_public_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN", "")
                     if railway_public_domain:
-                        progress_data["vnc_url"] = f"vnc://{railway_public_domain}:{vnc_port}"
-                        progress_data["message"] = f"Login required. Connect via VNC to log in: {progress_data['vnc_url']}"
+                        # Provide both VNC client URL and web-based noVNC URL
+                        progress_data["vnc_url"] = f"vnc://{railway_public_domain}:5900"
+                        progress_data["novnc_url"] = f"http://{railway_public_domain}:6080/vnc.html"
+                        progress_data["message"] = f"Login required. Open browser at: {progress_data['novnc_url']} to log in directly"
+                    else:
+                        progress_data["message"] = "Login required. Please connect via VNC or provide authentication cookies."
                 
                 # Calculate estimated time remaining if we have progress
                 # Only calculate after minimum progress to avoid inaccurate early estimates
